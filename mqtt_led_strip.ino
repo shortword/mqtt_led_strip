@@ -36,7 +36,8 @@
 static CRGB leds[NUM_LEDS];
 static WiFiClient wifiClient;
 Adafruit_MQTT_Client mqttClient(&wifiClient, mqtt_server, mqtt_port, mqtt_user, mqtt_pass);
-Adafruit_MQTT_Subscribe mqttColorStr(&mqttClient, mqtt_topic, MQTT_QOS_1);
+Adafruit_MQTT_Subscribe mqttColorStr(&mqttClient, mqtt_topic_color, MQTT_QOS_1);
+Adafruit_MQTT_Subscribe mqttBright(&mqttClient, mqtt_topic_bright, MQTT_QOS_1);
 
 
 static void backoff_blink(unsigned int * seconds, uint32_t color) {
@@ -131,12 +132,12 @@ static void led_blink(int led_num, uint32_t color, unsigned int delay_ms) {
 }
 
 
-/* set_all()
+/* led_set_all_color()
  * Sets all LEDs to a particular color
  * @color: Color entry from the FastLED library
  * @delay_ms: How long to wait between each LED
  */
-static void led_set_all(uint32_t color, unsigned int delay_ms) {
+static void led_set_all_color(uint32_t color, unsigned int delay_ms) {
   for (int i = 0; i < NUM_LEDS; i++) {
     if (delay_ms) {
       set_led(i, color);
@@ -152,26 +153,41 @@ static void led_set_all(uint32_t color, unsigned int delay_ms) {
 
 
 
-/* mqtt_recv()
- * Callback when we receive an MQTT message
- * @msg_size - Size of the message received 
+/* mqtt_recv_color()
+ * Callback when we receive an MQTT message; color string
+ * @msg - Message received
+ * @len - Length of @msg
  */
-void mqtt_recv(char * msg, uint16_t len) {
-  Serial.print("Received: ");
+void mqtt_recv_color(char * msg, uint16_t len) {
+  Serial.print("Color Received: ");
   Serial.println(msg);
 
   if (strncmp((char*)msg, "red", len) == 0)
-    led_set_all(CRGB::Red, WIPE_DELAY);
+    led_set_all_color(CRGB::Red, WIPE_DELAY);
   else if (strncmp((char*)msg, "orange", len) == 0)
-    led_set_all(CRGB::Orange, WIPE_DELAY);
+    led_set_all_color(CRGB::Orange, WIPE_DELAY);
   else if (strncmp((char*)msg, "yellow", len) == 0)
-    led_set_all(CRGB::Yellow, WIPE_DELAY);
+    led_set_all_color(CRGB::Yellow, WIPE_DELAY);
   else if (strncmp((char*)msg, "green", len) == 0)
-    led_set_all(CRGB::Green, WIPE_DELAY);
+    led_set_all_color(CRGB::Green, WIPE_DELAY);
   else if (strncmp((char*)msg, "blue", len) == 0)
-    led_set_all(CRGB::Blue, WIPE_DELAY);
+    led_set_all_color(CRGB::Blue, WIPE_DELAY);
   else
     Serial.print("Invalid message received");
+}
+
+
+/* mqtt_recv_bright()
+ * Callback when we receive an MQTT message about brightness
+ */
+void mqtt_recv_bright(uint32_t bright) {
+  Serial.print("Bright Received: ");
+  Serial.println(bright);
+
+  if (bright <= 0xFF) {
+      FastLED.setBrightness((uint8_t)bright);
+      FastLED.show();
+  }
 }
 
 
@@ -179,7 +195,7 @@ void mqtt_recv(char * msg, uint16_t len) {
  * Usual Arduino setup
  */
 void setup() {
-  // Give a second to let things settle (like the LED caps)
+  // Give a second to let things settle (like the LED cap)
   // Sub-optimal, but whatever
   delay(1000);
 
@@ -202,11 +218,13 @@ void setup() {
   check_wifi();
 
   // MQTT setup
-  mqttColorStr.setCallback(mqtt_recv);
+  mqttColorStr.setCallback(mqtt_recv_color);
   mqttClient.subscribe(&mqttColorStr);
+  mqttBright.setCallback(mqtt_recv_bright);
+  mqttClient.subscribe(&mqttBright);
 
   // Show that we've completed initialization
-  led_set_all(CRGB::White, 0);
+  led_set_all_color(CRGB::White, 0);
   delay(1000);
 }
 
